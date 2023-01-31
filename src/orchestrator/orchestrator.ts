@@ -44,10 +44,10 @@ class Orchestrator {
         if(history) {
             const parsedHistory = JSON.parse(history)
             parsedHistory.push(result)
-            await this._redis.set(process_id, JSON.stringify(parsedHistory))
+            await this._redis.set(process_id, JSON.stringify(parsedHistory), { EX: 50 })
             return
         }
-        await this._redis.set(process_id, JSON.stringify([result]))
+        await this._redis.set(process_id, JSON.stringify([result]), { EX: 50 })
     }
 
     async startProcess(inputMessage: ResultValue) {
@@ -61,7 +61,7 @@ class Orchestrator {
             execution_data: { bag: {}, input: input, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
             node_spec: startNode,
             workflow_name,
-            process_id: `wf-${workflow_name}-pid-${Math.floor(Math.random()*100000)}`,
+            process_id: `wf-${workflow_name}-pid-${Math.floor(Math.random()*100000000000)}`,
         }
         
         await Orchestrator.producer.send({

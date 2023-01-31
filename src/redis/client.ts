@@ -1,4 +1,4 @@
-import { createClient, RedisClientType } from 'redis'
+import { createClient, RedisClientType, SetOptions } from 'redis'
 
 class RedisClient {
     static _instance: RedisClient
@@ -34,8 +34,8 @@ class RedisClient {
         return await this._client.get(key) as string
     }
 
-    async set(key: string, value: any) {
-        return await this._client.set(key, value)
+    async set(key: string, value: any, options: SetOptions) {
+        return await this._client.setEx(key, options.EX || -1 , value)
     }
 }
 
