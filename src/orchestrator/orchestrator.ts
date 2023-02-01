@@ -27,6 +27,11 @@ class Orchestrator {
         http: 'http-nodes-topic',
         start: 'start-nodes-topic',
         finish: 'finish-nodes-topic',
+        form: 'form-request-nodes-topic',
+        flow: 'flow-nodes-topic',
+        script: 'js-script-task-nodes-topic',
+        timer: 'timer-nodes-topic',
+        user: 'user-task-nodes-topic',
     }
 
     private _redis : RedisClient = new RedisClient()
@@ -86,7 +91,7 @@ class Orchestrator {
         const nodeResolution = (nextNode.category || nextNode.type).toLowerCase()
 
         const action : Action = {
-            execution_data: { bag: result.bag, input: result.result, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
+            execution_data: { bag: result.bag, input: result.result, external_input: {}, actor_data: {}, environment: {}, parameters: nextNode.parameters },
             node_spec: nextNode,
             workflow_name,
             process_id
@@ -94,7 +99,11 @@ class Orchestrator {
         
         await Orchestrator.producer.send({
             topic: this._topics[nodeResolution],
-            messages: [{ value: JSON.stringify(action) }],
+            messages: [
+                { 
+                    value: JSON.stringify(action)
+                }
+            ],
         })
         return
     }
