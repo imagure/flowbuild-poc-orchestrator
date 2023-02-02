@@ -12,7 +12,7 @@ class RedisClient {
     }
 
     private _client: RedisClientType = createClient({
-        url: `redis://:eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81@${process.env.REDIS_HOST || 'localhost'}:6379`,
+        url: `redis://:${process.env.REDIS_PASSWORD || 'eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81'}@${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
     })
 
     constructor() {
