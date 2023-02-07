@@ -1,8 +1,9 @@
+import { v4 as uuid } from 'uuid'
 import { Consumer, Producer } from 'kafkajs'
-import { ResultValue } from '../kafka/types';
-import { RedisClient } from '../redis';
-import { Action } from './types';
-
+import { StartValue, NodeResultValue } from '../kafka/types'
+import { RedisClient } from '../redis'
+import { Action } from './types'
+import { envs } from '../configs/env'
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -23,7 +24,7 @@ class Orchestrator {
         Orchestrator._producer = producer;
     }
 
-    private _topics : {[key: string]: any} = {
+    private _topics : {[key: string]: string} = {
         http: 'http-nodes-topic',
         start: 'start-nodes-topic',
         finish: 'finish-nodes-topic',
@@ -35,6 +36,7 @@ class Orchestrator {
     }
 
     private _redis : RedisClient = new RedisClient()
+    private _phEX : number = envs.PROCESS_HISTORY_EXPIRATION
 
     constructor() {
         if(Orchestrator.instance) {
@@ -45,20 +47,24 @@ class Orchestrator {
     }
 
     async saveResultToProcess(process_id: string, result: any) {
-        const history = await this._redis.get(process_id)
+        const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
             const parsedHistory = JSON.parse(history)
-            parsedHistory.push(result)
-            await this._redis.set(process_id, JSON.stringify(parsedHistory), { EX: 50 })
+            parsedHistory.steps.push(result)
+            parsedHistory.executing = result.next_node_id
+            await this._redis.set(`process_history:${process_id}`, JSON.stringify(parsedHistory), { EX: this._phEX })
             return
         }
-        await this._redis.set(process_id, JSON.stringify([result]), { EX: 50 })
+        await this._redis.set(`process_history:${process_id}`, JSON.stringify({
+            executing: result.node_id || 'unknown',
+            steps: []
+        }), { EX: this._phEX })
     }
 
-    async startProcess(inputMessage: ResultValue) {
+    async startProcess(inputMessage: StartValue) {
         const { input, workflow_name } = inputMessage
         
-        const blueprint = await this._redis.get(workflow_name)
+        const blueprint = await this._redis.get(`workflows:${workflow_name}`)
         const { blueprint_spec: { nodes } } = JSON.parse(blueprint)
 
         const startNode = nodes.find((n : any) => n.type==='Start')
@@ -66,25 +72,27 @@ class Orchestrator {
             execution_data: { bag: {}, input: input, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
             node_spec: startNode,
             workflow_name,
-            process_id: `wf-${workflow_name}-pid-${Math.floor(Math.random()*100000000000)}`,
+            process_id: uuid(),
         }
         
         await Orchestrator.producer.send({
             topic: this._topics['start'],
             messages: [{ value: JSON.stringify(action) }],
         })
+
+        this.saveResultToProcess(action.process_id, { node_id: startNode.node_id })
     }
 
-    async resultProcess(inputMessage: ResultValue) : Promise<void> {
+    async processResult(inputMessage: NodeResultValue) : Promise<void> {
         const { result, workflow_name, process_id } = inputMessage
 
         this.saveResultToProcess(process_id, result)
 
-        if(!result.next_node_id) {
+        if(!result?.next_node_id) {
             return
         }
 
-        const blueprint = await this._redis.get(workflow_name)
+        const blueprint = await this._redis.get(`workflows:${workflow_name}`)
         const { blueprint_spec: { nodes } } = JSON.parse(blueprint)
 
         const nextNode = nodes.find((n : any) => n.id===result.next_node_id)
@@ -108,18 +116,13 @@ class Orchestrator {
         return
     }
 
-    async runAction(topic: string, inputMessage: ResultValue) {
+    async runAction(topic: string, inputMessage: NodeResultValue) {
         if(topic==='orchestrator-start-process-topic') {
             return await this.startProcess(inputMessage)
         }
 
         if(topic==='orchestrator-result-topic') {
-            return await this.resultProcess(inputMessage)
-        }
-
-        if(topic==='orchestrator-finish-topic') {
-            //ToDo
-            return null
+            return await this.processResult(inputMessage)
         }
     }
 

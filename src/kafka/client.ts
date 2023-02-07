@@ -1,9 +1,11 @@
 import { Kafka } from 'kafkajs'
+import { v4 as uuid } from 'uuid'
+import { envs } from '../configs/env'
 import { Orchestrator } from '../orchestrator'
 
 const kafka = new Kafka({
-  clientId: `orchestrator-${Math.floor(Math.random()*100000)}`,
-  brokers: [`${process.env.BROKER_HOST || 'localhost'}:9092`]
+  clientId: `orchestrator-${uuid()}`,
+  brokers: [`${envs.BROKER_HOST}:${envs.BROKER_PORT}`]
 })
 
 const producer = kafka.producer()

@@ -1,6 +1,7 @@
-import { Message, ResultValue } from './message.type'
+import { Message, StartValue, NodeResultValue } from './message.type'
 
 export {
     Message,
-    ResultValue
+    StartValue,
+    NodeResultValue
 }
