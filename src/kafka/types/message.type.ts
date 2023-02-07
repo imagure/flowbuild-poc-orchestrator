@@ -1,3 +1,5 @@
+import { NodeResult } from "../../orchestrator/types"
+
 export type Message = {
     value: MinimumValue | string
 }
@@ -6,12 +8,12 @@ export type MinimumValue = {
     workflow_name: string
 }
 
-export interface StartValue extends MinimumValue {
+export interface StartMessage extends MinimumValue {
     workflow_name: string
     input?: { [key: string]: any }
 }
 
-export interface NodeResultValue extends StartValue {
+export interface NodeResultMessage extends StartMessage {
     process_id: string
-    result: { [key: string]: any }
+    result: NodeResult
 }

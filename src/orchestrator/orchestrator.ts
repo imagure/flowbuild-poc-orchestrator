@@ -1,9 +1,10 @@
 import { v4 as uuid } from 'uuid'
 import { Consumer, Producer } from 'kafkajs'
-import { StartValue, NodeResultValue } from '../kafka/types'
+import { StartMessage, NodeResultMessage } from '../kafka/types'
 import { RedisClient } from '../redis'
-import { Action } from './types'
+import { Action, NodeResult, Workflow, Node } from './types'
 import { envs } from '../configs/env'
+import { log } from '../utils'
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -46,7 +47,7 @@ class Orchestrator {
         return this
     }
 
-    async saveResultToProcess(process_id: string, result: any) {
+    async saveResultToProcess(process_id: string, result: NodeResult) {
         const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
             const parsedHistory = JSON.parse(history)
@@ -61,13 +62,13 @@ class Orchestrator {
         }), { EX: this._phEX })
     }
 
-    async startProcess(inputMessage: StartValue) {
+    async startProcess(inputMessage: StartMessage) {
         const { input, workflow_name } = inputMessage
         
-        const blueprint = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes } } = JSON.parse(blueprint)
+        const workflow = await this._redis.get(`workflows:${workflow_name}`)
+        const { blueprint_spec: { nodes } } = JSON.parse(workflow) as Workflow
 
-        const startNode = nodes.find((n : any) => n.type==='Start')
+        const startNode = nodes.find((n : Node) => n.type==='Start')
         const action : Action = {
             execution_data: { bag: {}, input: input, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
             node_spec: startNode,
@@ -80,10 +81,10 @@ class Orchestrator {
             messages: [{ value: JSON.stringify(action) }],
         })
 
-        this.saveResultToProcess(action.process_id, { node_id: startNode.node_id })
+        this.saveResultToProcess(action.process_id, { node_id: startNode?.id } as NodeResult)
     }
 
-    async processResult(inputMessage: NodeResultValue) : Promise<void> {
+    async processResult(inputMessage: NodeResultMessage) : Promise<void> {
         const { result, workflow_name, process_id } = inputMessage
 
         this.saveResultToProcess(process_id, result)
@@ -93,30 +94,39 @@ class Orchestrator {
         }
 
         const blueprint = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes } } = JSON.parse(blueprint)
+        const { blueprint_spec: { nodes } } = JSON.parse(blueprint) as Workflow
 
-        const nextNode = nodes.find((n : any) => n.id===result.next_node_id)
-        const nodeResolution = (nextNode.category || nextNode.type).toLowerCase()
+        const nextNode = nodes.find((n : Node) => n.id===result.next_node_id)
+        const nodeResolution = (nextNode?.category || nextNode?.type)?.toLowerCase()
 
-        const action : Action = {
-            execution_data: { bag: result.bag, input: result.result, external_input: {}, actor_data: {}, environment: {}, parameters: nextNode.parameters },
-            node_spec: nextNode,
-            workflow_name,
-            process_id
+        if(nodeResolution) {
+            const action : Action = {
+                execution_data: { 
+                    bag: result.bag, 
+                    input: result.result, 
+                    external_input: {}, 
+                    actor_data: {}, 
+                    environment: {}, 
+                    parameters: nextNode?.parameters || {} 
+                },
+                node_spec: nextNode,
+                workflow_name,
+                process_id
+            }
+            
+            await Orchestrator.producer.send({
+                topic: this._topics[nodeResolution],
+                messages: [
+                    { 
+                        value: JSON.stringify(action)
+                    }
+                ],
+            })
         }
-        
-        await Orchestrator.producer.send({
-            topic: this._topics[nodeResolution],
-            messages: [
-                { 
-                    value: JSON.stringify(action)
-                }
-            ],
-        })
         return
     }
 
-    async runAction(topic: string, inputMessage: NodeResultValue) {
+    async runAction(topic: string, inputMessage: NodeResultMessage) {
         if(topic==='orchestrator-start-process-topic') {
             return await this.startProcess(inputMessage)
         }
@@ -131,7 +141,10 @@ class Orchestrator {
             eachMessage: async ({ topic, partition, message }) : Promise<void>=> {
                 const receivedMessage = message.value?.toString() || ''
 
-                console.info(`\nMessage received on Orchestrator.connect -> ${JSON.stringify({ partition, offset: message.offset, value: receivedMessage })}`)
+                log({
+                    level: 'info',
+                    message: `Message received on Orchestrator.connect -> ${JSON.stringify({ partition, offset: message.offset, value: receivedMessage })}`
+                })
 
                 try {
                     const inputMessage = JSON.parse(receivedMessage)
