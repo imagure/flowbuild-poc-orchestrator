@@ -68,7 +68,7 @@ class Orchestrator {
         const workflow = await this._redis.get(`workflows:${workflow_name}`)
         const { blueprint_spec: { nodes } } = JSON.parse(workflow) as Workflow
 
-        const startNode = nodes.find((n : Node) => n.type==='Start')
+        const startNode = nodes.find((n : Node) => n.type==='start')
         const action : Action = {
             execution_data: { bag: {}, input: input, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
             node_spec: startNode,
