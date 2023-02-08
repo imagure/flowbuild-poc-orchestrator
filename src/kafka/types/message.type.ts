@@ -4,12 +4,18 @@ export type Message = {
     value: MinimumValue | string
 }
 
+export interface Actor {
+    id: 'string',
+    roles: Array<string>,
+    iat: number
+}
+
 export type MinimumValue = {
-    workflow_name: string
+    workflow_name: string,
+    actor: Actor
 }
 
 export interface StartMessage extends MinimumValue {
-    workflow_name: string
     input?: { [key: string]: any }
 }
 

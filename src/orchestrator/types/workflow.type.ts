@@ -1,7 +1,6 @@
 export type Lane = {
     id: string,
-    name: string,
-    rule: any
+    roles: Array<string>
 }
 
 export type Node = {

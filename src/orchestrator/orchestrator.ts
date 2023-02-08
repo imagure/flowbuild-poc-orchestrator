@@ -2,9 +2,10 @@ import { v4 as uuid } from 'uuid'
 import { Consumer, Producer } from 'kafkajs'
 import { StartMessage, NodeResultMessage } from '../kafka/types'
 import { RedisClient } from '../redis'
-import { Action, NodeResult, Workflow, Node } from './types'
+import { Action, NodeResult, Workflow, Node, Lane } from './types'
 import { envs } from '../configs/env'
 import { log } from '../utils'
+import { Actor } from '../kafka/types/message.type'
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -47,6 +48,32 @@ class Orchestrator {
         return this
     }
 
+    validateActor(
+        { node, lanes, actor } : 
+        { node : Node, lanes: Array<Lane>, actor: Actor }
+        ): { isValid: Boolean, forbiddenState?: NodeResult } {
+            const { roles: actorRoles } = actor
+            const { roles: laneRoles } = lanes.find((lane: Lane) => lane.id === node.lane_id) || { roles: [] }
+            const roleMatches = laneRoles.find((laneRole: string) => actorRoles.includes(laneRole))
+            return roleMatches 
+            ? {
+                isValid: true
+            } 
+            : { 
+                isValid: false, 
+                forbiddenState: {
+                    node_id: node.id,
+                    bag: {},
+                    external_result: {},
+                    result: {},
+                    error: 'Forbidden Lane',
+                    status: 'forbidden',
+                    next_node_id: node.next,
+                    time_elapsed: 0,
+                }  as NodeResult
+             }
+    }
+
     async saveResultToProcess(process_id: string, result: NodeResult) {
         const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
@@ -63,10 +90,10 @@ class Orchestrator {
     }
 
     async startProcess(inputMessage: StartMessage) {
-        const { input, workflow_name } = inputMessage
+        const { input, workflow_name, actor } = inputMessage
         
         const workflow = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes } } = JSON.parse(workflow) as Workflow
+        const { blueprint_spec: { nodes, lanes } } = JSON.parse(workflow) as Workflow
 
         const startNode = nodes.find((n : Node) => n.type==='start')
         const action : Action = {
@@ -74,6 +101,13 @@ class Orchestrator {
             node_spec: startNode,
             workflow_name,
             process_id: uuid(),
+            actor
+        }
+
+        const { isValid, forbiddenState } = this.validateActor({ node: startNode!, lanes, actor })
+        if(!isValid) {
+            this.saveResultToProcess(action.process_id, forbiddenState!)
+            return
         }
         
         await Orchestrator.producer.send({
@@ -85,7 +119,7 @@ class Orchestrator {
     }
 
     async processResult(inputMessage: NodeResultMessage) : Promise<void> {
-        const { result, workflow_name, process_id } = inputMessage
+        const { result, workflow_name, process_id, actor } = inputMessage
 
         this.saveResultToProcess(process_id, result)
 
@@ -94,7 +128,7 @@ class Orchestrator {
         }
 
         const blueprint = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes } } = JSON.parse(blueprint) as Workflow
+        const { blueprint_spec: { nodes, lanes } } = JSON.parse(blueprint) as Workflow
 
         const nextNode = nodes.find((n : Node) => n.id===result.next_node_id)
         const nodeResolution = (nextNode?.category || nextNode?.type)?.toLowerCase()
@@ -111,9 +145,16 @@ class Orchestrator {
                 },
                 node_spec: nextNode,
                 workflow_name,
-                process_id
+                process_id,
+                actor
             }
-            
+
+            const { isValid, forbiddenState } = this.validateActor({ node: nextNode!, lanes, actor })
+            if(!isValid) {
+                this.saveResultToProcess(action.process_id, forbiddenState!)
+                return
+            }
+
             await Orchestrator.producer.send({
                 topic: this._topics[nodeResolution],
                 messages: [
