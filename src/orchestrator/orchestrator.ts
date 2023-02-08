@@ -85,11 +85,18 @@ class Orchestrator {
         })
     }
 
-    async saveResultToProcess(workflow_name: string, process_id: string, result: NodeResult) {
-        const history = await this._redis.get(`process_history:${process_id}`)
+    async saveResultToProcess(process_data: {[key: string]: any}, result: NodeResult) {
+        const {
+            process_id,
+            workflow_name,
+            history
+        } = process_data
         if(history) {
             const parsedHistory = JSON.parse(history)
             parsedHistory.states.push(result)
+            if(result.bag) {
+                parsedHistory.bag = {...parsedHistory.bag, [result.node_id]: result.bag || {} }
+            }
             parsedHistory.executing = result.next_node_id
             await this._redis.set(`process_history:${process_id}`, JSON.stringify(parsedHistory), { EX: this._phEX })
             return
@@ -97,6 +104,7 @@ class Orchestrator {
         await this._redis.set(`process_history:${process_id}`, JSON.stringify({
             workflow_name,
             executing: result.node_id || 'unknown',
+            bag: {},
             states: result.status ? [result] : []
         }), { EX: this._phEX })
     }
@@ -118,7 +126,7 @@ class Orchestrator {
 
         const { isValid, forbiddenState } = this.validateActor({ node: startNode!, lanes, actor })
         if(!isValid) {
-            this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
+            this.saveResultToProcess({ workflow_name, process_id: action.process_id }, forbiddenState!)
             this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
             return
         }
@@ -129,13 +137,16 @@ class Orchestrator {
         })
 
         const nodeResult = { node_id: startNode?.id } as NodeResult
-        this.saveResultToProcess(workflow_name, action.process_id, nodeResult)
+        this.saveResultToProcess({ workflow_name, process_id: action.process_id }, nodeResult)
         this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: nodeResult })
     }
 
     async continueProcess(inputMessage: ContinueMessage) {
         const { input, workflow_name, actor, process_id } = inputMessage
         
+        const history = await this._redis.get(`process_history:${process_id}`)
+        const { bag } = JSON.parse(history)
+
         const [workflow, string_process_history] = await Promise.all([
             this._redis.get(`workflows:${workflow_name}`),
             this._redis.get(`process_history:${process_id}`),
@@ -145,16 +156,16 @@ class Orchestrator {
 
         const continueNode = nodes.find((n : Node) => n.id===executing)
         const action : Action = {
-            execution_data: { bag: {}, input: {}, external_input: input, actor_data: {}, environment: {}, parameters: {} },
+            execution_data: { bag: bag, input: {}, external_input: input, actor_data: actor, environment: {}, parameters: {} },
             node_spec: continueNode,
             workflow_name,
-            process_id: uuid(),
+            process_id,
             actor
         }
 
         const { isValid, forbiddenState } = this.validateActor({ node: continueNode!, lanes, actor })
         if(!isValid) {
-            this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
+            this.saveResultToProcess({ history, workflow_name, process_id: action.process_id }, forbiddenState!)
             this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
             return
         }
@@ -172,7 +183,10 @@ class Orchestrator {
     async processResult(inputMessage: NodeResultMessage) : Promise<void> {
         const { result, workflow_name, process_id, actor } = inputMessage
 
-        this.saveResultToProcess(workflow_name, process_id, result)
+        const history = await this._redis.get(`process_history:${process_id}`)
+        const { bag } = JSON.parse(history)
+
+        this.saveResultToProcess({ history, workflow_name, process_id }, result)
         this.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
 
         if(!result?.next_node_id || result.status === 'waiting') {
@@ -188,10 +202,10 @@ class Orchestrator {
         if(nodeResolution) {
             const action : Action = {
                 execution_data: { 
-                    bag: result.bag, 
+                    bag: bag, 
                     input: result.result, 
                     external_input: null,
-                    actor_data: {}, 
+                    actor_data: actor, 
                     environment: {}, 
                     parameters: nextNode?.parameters || {} 
                 },
@@ -203,7 +217,7 @@ class Orchestrator {
 
             const { isValid, forbiddenState } = this.validateActor({ node: nextNode!, lanes, actor })
             if(!isValid) {
-                this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
+                this.saveResultToProcess({ history, workflow_name, process_id: process_id }, forbiddenState!)
                 this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
                 return
             }
