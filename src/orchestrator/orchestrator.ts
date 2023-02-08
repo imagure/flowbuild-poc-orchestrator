@@ -74,6 +74,17 @@ class Orchestrator {
              }
     }
 
+    async emitProcessState(actor_id: string, process_data: {[key: string]: any}) {
+        await Orchestrator.producer.send({
+            topic: `process-states-topic`,
+            messages: [
+                { 
+                    value: JSON.stringify({ actor_id, process_data })
+                }
+            ],
+        })
+    }
+
     async saveResultToProcess(process_id: string, result: NodeResult) {
         const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
@@ -107,6 +118,7 @@ class Orchestrator {
         const { isValid, forbiddenState } = this.validateActor({ node: startNode!, lanes, actor })
         if(!isValid) {
             this.saveResultToProcess(action.process_id, forbiddenState!)
+            this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
             return
         }
         
@@ -115,13 +127,16 @@ class Orchestrator {
             messages: [{ value: JSON.stringify(action) }],
         })
 
-        this.saveResultToProcess(action.process_id, { node_id: startNode?.id } as NodeResult)
+        const nodeResult = { node_id: startNode?.id } as NodeResult
+        this.saveResultToProcess(action.process_id, nodeResult)
+        this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: nodeResult })
     }
 
     async processResult(inputMessage: NodeResultMessage) : Promise<void> {
         const { result, workflow_name, process_id, actor } = inputMessage
 
         this.saveResultToProcess(process_id, result)
+        this.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
 
         if(!result?.next_node_id) {
             return
@@ -152,6 +167,7 @@ class Orchestrator {
             const { isValid, forbiddenState } = this.validateActor({ node: nextNode!, lanes, actor })
             if(!isValid) {
                 this.saveResultToProcess(action.process_id, forbiddenState!)
+                this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
                 return
             }
 
