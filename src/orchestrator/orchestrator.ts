@@ -5,7 +5,7 @@ import { RedisClient } from '../redis'
 import { Action, NodeResult, Workflow, Node, Lane } from './types'
 import { envs } from '../configs/env'
 import { log } from '../utils'
-import { Actor } from '../kafka/types/message.type'
+import { Actor, ContinueMessage } from '../kafka/types/message.type'
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -34,7 +34,7 @@ class Orchestrator {
         flow: 'flow-nodes-topic',
         script: 'js-script-task-nodes-topic',
         timer: 'timer-nodes-topic',
-        user: 'user-task-nodes-topic',
+        usertask: 'user-task-nodes-topic',
     }
 
     private _redis : RedisClient = new RedisClient()
@@ -85,7 +85,7 @@ class Orchestrator {
         })
     }
 
-    async saveResultToProcess(process_id: string, result: NodeResult) {
+    async saveResultToProcess(workflow_name: string, process_id: string, result: NodeResult) {
         const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
             const parsedHistory = JSON.parse(history)
@@ -95,6 +95,7 @@ class Orchestrator {
             return
         }
         await this._redis.set(`process_history:${process_id}`, JSON.stringify({
+            workflow_name,
             executing: result.node_id || 'unknown',
             states: result.status ? [result] : []
         }), { EX: this._phEX })
@@ -108,7 +109,7 @@ class Orchestrator {
 
         const startNode = nodes.find((n : Node) => n.type==='start')
         const action : Action = {
-            execution_data: { bag: {}, input: input, external_input: {}, actor_data: {}, environment: {}, parameters: {} },
+            execution_data: { bag: {}, input: input, external_input: null, actor_data: {}, environment: {}, parameters: {} },
             node_spec: startNode,
             workflow_name,
             process_id: uuid(),
@@ -117,7 +118,7 @@ class Orchestrator {
 
         const { isValid, forbiddenState } = this.validateActor({ node: startNode!, lanes, actor })
         if(!isValid) {
-            this.saveResultToProcess(action.process_id, forbiddenState!)
+            this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
             this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
             return
         }
@@ -128,17 +129,53 @@ class Orchestrator {
         })
 
         const nodeResult = { node_id: startNode?.id } as NodeResult
-        this.saveResultToProcess(action.process_id, nodeResult)
+        this.saveResultToProcess(workflow_name, action.process_id, nodeResult)
         this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: nodeResult })
+    }
+
+    async continueProcess(inputMessage: ContinueMessage) {
+        const { input, workflow_name, actor, process_id } = inputMessage
+        
+        const [workflow, string_process_history] = await Promise.all([
+            this._redis.get(`workflows:${workflow_name}`),
+            this._redis.get(`process_history:${process_id}`),
+        ])
+        const { blueprint_spec: { nodes, lanes } } = JSON.parse(workflow) as Workflow
+        const { executing } = JSON.parse(string_process_history) || { executing: null }
+
+        const continueNode = nodes.find((n : Node) => n.id===executing)
+        const action : Action = {
+            execution_data: { bag: {}, input: {}, external_input: input, actor_data: {}, environment: {}, parameters: {} },
+            node_spec: continueNode,
+            workflow_name,
+            process_id: uuid(),
+            actor
+        }
+
+        const { isValid, forbiddenState } = this.validateActor({ node: continueNode!, lanes, actor })
+        if(!isValid) {
+            this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
+            this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
+            return
+        }
+        
+        const nodeResolution = (continueNode?.category || continueNode?.type)?.toLowerCase()
+        if(nodeResolution) {
+            await Orchestrator.producer.send({
+                topic: this._topics[nodeResolution],
+                messages: [{ value: JSON.stringify(action) }],
+            })
+        }
+        return
     }
 
     async processResult(inputMessage: NodeResultMessage) : Promise<void> {
         const { result, workflow_name, process_id, actor } = inputMessage
 
-        this.saveResultToProcess(process_id, result)
+        this.saveResultToProcess(workflow_name, process_id, result)
         this.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
 
-        if(!result?.next_node_id) {
+        if(!result?.next_node_id || result.status === 'waiting') {
             return
         }
 
@@ -153,7 +190,7 @@ class Orchestrator {
                 execution_data: { 
                     bag: result.bag, 
                     input: result.result, 
-                    external_input: {}, 
+                    external_input: null,
                     actor_data: {}, 
                     environment: {}, 
                     parameters: nextNode?.parameters || {} 
@@ -166,7 +203,7 @@ class Orchestrator {
 
             const { isValid, forbiddenState } = this.validateActor({ node: nextNode!, lanes, actor })
             if(!isValid) {
-                this.saveResultToProcess(action.process_id, forbiddenState!)
+                this.saveResultToProcess(workflow_name, action.process_id, forbiddenState!)
                 this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
                 return
             }
@@ -186,6 +223,10 @@ class Orchestrator {
     async runAction(topic: string, inputMessage: NodeResultMessage) {
         if(topic==='orchestrator-start-process-topic') {
             return await this.startProcess(inputMessage)
+        }
+
+        if(topic==='orchestrator-continue-process-topic') {
+            return await this.continueProcess(inputMessage)
         }
 
         if(topic==='orchestrator-result-topic') {

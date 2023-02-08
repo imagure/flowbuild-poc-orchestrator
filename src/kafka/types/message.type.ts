@@ -19,6 +19,11 @@ export interface StartMessage extends MinimumValue {
     input?: { [key: string]: any }
 }
 
+export interface ContinueMessage extends MinimumValue {
+    input?: { [key: string]: any }
+    process_id: string
+}
+
 export interface NodeResultMessage extends StartMessage {
     process_id: string
     result: NodeResult
