@@ -96,7 +96,7 @@ class Orchestrator {
         }
         await this._redis.set(`process_history:${process_id}`, JSON.stringify({
             executing: result.node_id || 'unknown',
-            states: result.status ? result : []
+            states: result.status ? [result] : []
         }), { EX: this._phEX })
     }
 
