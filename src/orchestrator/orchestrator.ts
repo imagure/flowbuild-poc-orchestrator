@@ -78,14 +78,14 @@ class Orchestrator {
         const history = await this._redis.get(`process_history:${process_id}`)
         if(history) {
             const parsedHistory = JSON.parse(history)
-            parsedHistory.steps.push(result)
+            parsedHistory.states.push(result)
             parsedHistory.executing = result.next_node_id
             await this._redis.set(`process_history:${process_id}`, JSON.stringify(parsedHistory), { EX: this._phEX })
             return
         }
         await this._redis.set(`process_history:${process_id}`, JSON.stringify({
             executing: result.node_id || 'unknown',
-            steps: []
+            states: result.status ? result : []
         }), { EX: this._phEX })
     }
 
