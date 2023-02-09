@@ -7,8 +7,8 @@ export async function processResult(orchestrator: Orchestrator, inputMessage: No
 
 
     const [workflow, history] = await Promise.all([
-        orchestrator._redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
-        orchestrator._redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
+        orchestrator.redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
+        orchestrator.redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
     ])
     const { bag } = history
     const { blueprint_spec: { nodes, lanes } } = workflow
@@ -47,7 +47,7 @@ export async function processResult(orchestrator: Orchestrator, inputMessage: No
         }
 
         await Orchestrator.producer.send({
-            topic: orchestrator._topics[nodeResolution],
+            topic: Orchestrator.topics[nodeResolution],
             messages: [
                 { 
                     value: JSON.stringify(action)

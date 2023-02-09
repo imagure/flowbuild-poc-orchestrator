@@ -32,18 +32,21 @@ class Orchestrator {
         Orchestrator._producer = producer;
     }
 
-    _topics : {[key: string]: string} = {
-        http: 'http-nodes-topic',
-        start: 'start-nodes-topic',
-        finish: 'finish-nodes-topic',
-        form: 'form-request-nodes-topic',
-        flow: 'flow-nodes-topic',
-        script: 'js-script-task-nodes-topic',
-        timer: 'timer-nodes-topic',
-        usertask: 'user-task-nodes-topic',
+    static get topics() : {[key: string]: string} {
+        return {
+            http: 'http-nodes-topic',
+            start: 'start-nodes-topic',
+            finish: 'finish-nodes-topic',
+            form: 'form-request-nodes-topic',
+            flow: 'flow-nodes-topic',
+            script: 'js-script-task-nodes-topic',
+            timer: 'timer-nodes-topic',
+            usertask: 'user-task-nodes-topic',
+        }
     }
+    
+    redis : RedisClient = new RedisClient()
 
-    _redis : RedisClient = new RedisClient()
     private _phEX : number = envs.PROCESS_HISTORY_EXPIRATION
 
     constructor() {
@@ -104,10 +107,10 @@ class Orchestrator {
                 clonedHistory.bag = {...clonedHistory.bag, [result.node_id]: result.bag || {} }
             }
             clonedHistory.executing = result.next_node_id
-            await this._redis.set(`process_history:${process_id}`, JSON.stringify(clonedHistory), { EX: this._phEX })
+            await this.redis.set(`process_history:${process_id}`, JSON.stringify(clonedHistory), { EX: this._phEX })
             return
         }
-        await this._redis.set(`process_history:${process_id}`, JSON.stringify({
+        await this.redis.set(`process_history:${process_id}`, JSON.stringify({
             workflow_name,
             executing: result.node_id || 'unknown',
             bag: {},

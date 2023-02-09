@@ -6,7 +6,7 @@ import { Orchestrator } from '../orchestrator'
 export async function startProcess(orchestrator: Orchestrator, inputMessage: StartMessage) {
     const { input, workflow_name, actor } = inputMessage
     
-    const workflow = await orchestrator._redis.get(`workflows:${workflow_name}`) as Workflow
+    const workflow = await orchestrator.redis.get(`workflows:${workflow_name}`) as Workflow
     const { blueprint_spec: { nodes, lanes } } = workflow
 
     const startNode = nodes.find((n: Node) => n.type === 'start')
@@ -26,7 +26,7 @@ export async function startProcess(orchestrator: Orchestrator, inputMessage: Sta
     }
     
     await Orchestrator.producer.send({
-        topic: orchestrator._topics['start'],
+        topic: Orchestrator.topics['start'],
         messages: [{ value: JSON.stringify(action) }],
     })
 
