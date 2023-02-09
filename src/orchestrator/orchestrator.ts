@@ -115,7 +115,7 @@ class Orchestrator {
         await this.redis.set(`process_history:${process_id}`, JSON.stringify({
             workflow_name,
             executing: result.node_id || 'unknown',
-            bag: {},
+            bag: bag || {},
             states: result.status ? [result] : [],
             status: result.status || 'running'
         }), { EX: this._phEX })

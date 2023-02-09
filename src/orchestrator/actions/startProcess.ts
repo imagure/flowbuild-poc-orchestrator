@@ -11,7 +11,7 @@ export async function startProcess(orchestrator: Orchestrator, inputMessage: Sta
 
     const startNode = nodes.find((n: Node) => n.type === 'start')
     const action : Action = {
-        execution_data: { bag: {}, input: input, external_input: null, actor_data: {}, environment: {}, parameters: {} },
+        execution_data: { bag: {...input}, input: input, external_input: null, actor_data: {}, environment: {}, parameters: {} },
         node_spec: startNode,
         workflow_name,
         process_id: uuid(),
@@ -31,6 +31,6 @@ export async function startProcess(orchestrator: Orchestrator, inputMessage: Sta
     })
 
     const nodeResult = { node_id: startNode?.id } as NodeResult
-    orchestrator.saveResultToProcess({ workflow_name, process_id: action.process_id }, nodeResult)
+    orchestrator.saveResultToProcess({ workflow_name, process_id: action.process_id, bag: { ...input } }, nodeResult)
     orchestrator.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: nodeResult })
 }
