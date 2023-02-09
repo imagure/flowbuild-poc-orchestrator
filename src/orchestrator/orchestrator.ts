@@ -1,12 +1,17 @@
-import { v4 as uuid } from 'uuid'
 import { Consumer, Producer } from 'kafkajs'
-import { StartMessage, NodeResultMessage } from '../kafka/types'
+import { NodeResultMessage } from '../kafka/types'
 import { RedisClient } from '../redis'
-import { Action, NodeResult, Workflow, Node, Lane, ProcessHistory, ProcessData, States } from './types'
+import { NodeResult, Node, Lane, ProcessData } from './types'
 import { envs } from '../configs/env'
 import { log } from '../utils'
-import { Actor, ContinueMessage } from '../kafka/types/message.type'
+import { Actor } from '../kafka/types/message.type'
 import { LooseObject } from '../types'
+import { 
+    startProcess, 
+    continueProcess, 
+    processResult 
+} from './actions'
+
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -27,7 +32,7 @@ class Orchestrator {
         Orchestrator._producer = producer;
     }
 
-    private _topics : {[key: string]: string} = {
+    _topics : {[key: string]: string} = {
         http: 'http-nodes-topic',
         start: 'start-nodes-topic',
         finish: 'finish-nodes-topic',
@@ -38,7 +43,7 @@ class Orchestrator {
         usertask: 'user-task-nodes-topic',
     }
 
-    private _redis : RedisClient = new RedisClient()
+    _redis : RedisClient = new RedisClient()
     private _phEX : number = envs.PROCESS_HISTORY_EXPIRATION
 
     constructor() {
@@ -110,142 +115,17 @@ class Orchestrator {
         }), { EX: this._phEX })
     }
 
-    async startProcess(inputMessage: StartMessage) {
-        const { input, workflow_name, actor } = inputMessage
-        
-        const workflow = await this._redis.get(`workflows:${workflow_name}`) as Workflow
-        const { blueprint_spec: { nodes, lanes } } = workflow
-
-        const startNode = nodes.find((n : Node) => n.type==='start')
-        const action : Action = {
-            execution_data: { bag: {}, input: input, external_input: null, actor_data: {}, environment: {}, parameters: {} },
-            node_spec: startNode,
-            workflow_name,
-            process_id: uuid(),
-            actor
-        }
-
-        const { isValid, forbiddenState } = this.validateActor({ node: startNode!, lanes, actor })
-        if(!isValid) {
-            this.saveResultToProcess({ workflow_name, process_id: action.process_id }, forbiddenState!)
-            this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
-            return
-        }
-        
-        await Orchestrator.producer.send({
-            topic: this._topics['start'],
-            messages: [{ value: JSON.stringify(action) }],
-        })
-
-        const nodeResult = { node_id: startNode?.id } as NodeResult
-        this.saveResultToProcess({ workflow_name, process_id: action.process_id }, nodeResult)
-        this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: nodeResult })
-    }
-
-    async continueProcess(inputMessage: ContinueMessage) {
-        const { input, workflow_name, actor, process_id } = inputMessage
-
-        const [workflow, history] = await Promise.all([
-            this._redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
-            this._redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
-        ])
-
-        const { blueprint_spec: { nodes, lanes } } = workflow
-        const { bag, executing } = history
-
-        const continueNode = nodes.find((n : Node) => n.id===executing)
-        const action : Action = {
-            execution_data: { bag: bag, input: {}, external_input: input, actor_data: actor, environment: {}, parameters: {} },
-            node_spec: continueNode,
-            workflow_name,
-            process_id,
-            actor
-        }
-
-        const { isValid, forbiddenState } = this.validateActor({ node: continueNode!, lanes, actor })
-        if(!isValid) {
-            this.saveResultToProcess({ history, workflow_name, process_id: action.process_id }, forbiddenState!)
-            this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
-            return
-        }
-        
-        const nodeResolution = (continueNode?.category || continueNode?.type)?.toLowerCase()
-        if(nodeResolution) {
-            await Orchestrator.producer.send({
-                topic: this._topics[nodeResolution],
-                messages: [{ value: JSON.stringify(action) }],
-            })
-        }
-        return
-    }
-
-    async processResult(inputMessage: NodeResultMessage) : Promise<void> {
-        const { result, workflow_name, process_id, actor } = inputMessage
-
-
-        const [workflow, history] = await Promise.all([
-            this._redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
-            this._redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
-        ])
-        const { bag } = history
-        const { blueprint_spec: { nodes, lanes } } = workflow
-
-        this.saveResultToProcess({ history, workflow_name, process_id }, result)
-        this.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
-
-        if(!result?.next_node_id || result.status === States.WAITING) {
-            return
-        }
-
-        const nextNode = nodes.find((n : Node) => n.id===result.next_node_id)
-        const nodeResolution = (nextNode?.category || nextNode?.type)?.toLowerCase()
-
-        if(nodeResolution) {
-            const action : Action = {
-                execution_data: { 
-                    bag: bag, 
-                    input: result.result, 
-                    external_input: null,
-                    actor_data: actor, 
-                    environment: {}, 
-                    parameters: nextNode?.parameters || {} 
-                },
-                node_spec: nextNode,
-                workflow_name,
-                process_id,
-                actor
-            }
-
-            const { isValid, forbiddenState } = this.validateActor({ node: nextNode!, lanes, actor })
-            if(!isValid) {
-                this.saveResultToProcess({ history, workflow_name, process_id: process_id }, forbiddenState!)
-                this.emitProcessState(actor.id, { process_id: action.process_id, workflow_name, state: forbiddenState! })
-                return
-            }
-
-            await Orchestrator.producer.send({
-                topic: this._topics[nodeResolution],
-                messages: [
-                    { 
-                        value: JSON.stringify(action)
-                    }
-                ],
-            })
-        }
-        return
-    }
-
     async runAction(topic: string, inputMessage: NodeResultMessage) {
         if(topic==='orchestrator-start-process-topic') {
-            return await this.startProcess(inputMessage)
+            return await startProcess(this, inputMessage)
         }
 
         if(topic==='orchestrator-continue-process-topic') {
-            return await this.continueProcess(inputMessage)
+            return await continueProcess(this, inputMessage)
         }
 
         if(topic==='orchestrator-result-topic') {
-            return await this.processResult(inputMessage)
+            return await processResult(this, inputMessage)
         }
     }
 
