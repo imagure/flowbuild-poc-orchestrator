@@ -41,8 +41,11 @@ class RedisClient {
         }
     }
 
-    async set(key: string, value: any, options: SetOptions) {
-        return await this._client.setEx(key, options.EX || -1 , value)
+    async set(key: string, value: any, options?: SetOptions) {
+        if(options?.EX) {
+            return await this._client.setEx(key, options.EX, value)    
+        }
+        return await this._client.set(key, value)
     }
 }
 

@@ -1,3 +1,4 @@
+import { LooseObject } from "../../types"
 import { ProcessState } from "./process_state.type"
 
 export type ProcessHistory = {
@@ -10,5 +11,6 @@ export type ProcessHistory = {
 export type ProcessData = {
     process_id?: string,
     workflow_name: string,
-    history?: ProcessHistory
+    history?: ProcessHistory,
+    bag?: LooseObject
 }

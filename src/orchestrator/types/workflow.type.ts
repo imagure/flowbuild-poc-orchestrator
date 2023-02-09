@@ -1,3 +1,9 @@
+export type WfEvent = {
+    category: string,
+    family: string,
+    definition: string
+}
+
 export type Lane = {
     id: string,
     roles: Array<string>
@@ -10,7 +16,10 @@ export type Node = {
     type: string,
     category: string,
     lane_id: string,
-    parameters: {[key: string]: string},
+    parameters: {
+        [key: string]: any,
+        events: Array<WfEvent>,
+    },
 }
 
 export type Blueprint = {

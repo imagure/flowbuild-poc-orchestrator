@@ -5,5 +5,5 @@ import { processResult } from "./processResult"
 export {
     startProcess,
     continueProcess,
-    processResult
+    processResult,
 }

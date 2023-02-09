@@ -2,7 +2,11 @@ import { connect } from './kafka'
 import { createLogger } from './utils'
 // import { publishPrompt } from './utils'
 
-const orchestrator_consumed_topics = ['orchestrator-result-topic', 'orchestrator-start-process-topic', 'orchestrator-continue-process-topic']
+const orchestrator_consumed_topics = [
+    'orchestrator-result-topic', 
+    'orchestrator-start-process-topic', 
+    'orchestrator-continue-process-topic',
+]
 
 async function main() {
     createLogger('info')

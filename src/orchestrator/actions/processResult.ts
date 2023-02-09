@@ -10,13 +10,16 @@ export async function processResult(orchestrator: Orchestrator, inputMessage: No
         orchestrator.redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
         orchestrator.redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
     ])
-    const { bag } = history
+    
+    const bag = {...history.bag, [result.node_id]: result.bag || {} }
+    
     const { blueprint_spec: { nodes, lanes } } = workflow
 
-    orchestrator.saveResultToProcess({ history, workflow_name, process_id }, result)
+    orchestrator.saveResultToProcess({ history, workflow_name, process_id, bag }, result)
     orchestrator.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
 
-    if(!result?.next_node_id || result.status === States.WAITING) {
+    if(!result?.next_node_id || 
+        ([States.WAITING, States.ERROR].includes(result.status as States))) {
         return
     }
 

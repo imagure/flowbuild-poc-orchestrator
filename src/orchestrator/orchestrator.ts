@@ -1,7 +1,7 @@
 import { Consumer, Producer } from 'kafkajs'
 import { NodeResultMessage } from '../kafka/types'
 import { RedisClient } from '../redis'
-import { NodeResult, Node, Lane, ProcessData } from './types'
+import { NodeResult, Node, Lane, ProcessData, Workflow, WfEvent } from './types'
 import { envs } from '../configs/env'
 import { log } from '../utils'
 import { Actor } from '../kafka/types/message.type'
@@ -9,7 +9,7 @@ import { LooseObject } from '../types'
 import { 
     startProcess, 
     continueProcess, 
-    processResult 
+    processResult,
 } from './actions'
 
 class Orchestrator {
@@ -41,7 +41,9 @@ class Orchestrator {
             flow: 'flow-nodes-topic',
             script: 'js-script-task-nodes-topic',
             timer: 'timer-nodes-topic',
+            systemtask: 'system-task-nodes-topic',
             usertask: 'user-task-nodes-topic',
+            event: 'event-nodes-topic'
         }
     }
     
@@ -98,15 +100,15 @@ class Orchestrator {
         const {
             process_id,
             workflow_name,
-            history
+            history,
+            bag
         } = process_data
         if(history) {
             const clonedHistory = JSON.parse(JSON.stringify(history))
             clonedHistory.states.push(result)
-            if(result.bag) {
-                clonedHistory.bag = {...clonedHistory.bag, [result.node_id]: result.bag || {} }
-            }
+            clonedHistory.bag = bag
             clonedHistory.executing = result.next_node_id
+            clonedHistory.status = result.status
             await this.redis.set(`process_history:${process_id}`, JSON.stringify(clonedHistory), { EX: this._phEX })
             return
         }
@@ -114,7 +116,8 @@ class Orchestrator {
             workflow_name,
             executing: result.node_id || 'unknown',
             bag: {},
-            states: result.status ? [result] : []
+            states: result.status ? [result] : [],
+            status: result.status || 'running'
         }), { EX: this._phEX })
     }
 

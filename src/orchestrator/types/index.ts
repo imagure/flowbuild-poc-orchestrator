@@ -1,6 +1,6 @@
 import { Action } from './action.type'
 import { NodeResult } from './result.type'
-import { Lane, Node, Blueprint, Workflow } from './workflow.type'
+import { Lane, Node, Blueprint, Workflow, WfEvent } from './workflow.type'
 import { ProcessData, ProcessHistory } from './history.type'
 import { ProcessState, States } from './process_state.type'
 
@@ -14,5 +14,6 @@ export {
     ProcessHistory,
     ProcessState,
     ProcessData,
-    States
+    States,
+    WfEvent
 }

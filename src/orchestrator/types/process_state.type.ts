@@ -3,6 +3,7 @@ export enum States {
     WAITING = 'waiting',
     PENDING = 'pending',
     FINISHED = 'finished',
+    ERROR = 'error',
 }
 
 export type ProcessState = {
