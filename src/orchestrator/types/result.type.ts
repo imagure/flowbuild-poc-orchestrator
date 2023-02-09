@@ -1,7 +1,9 @@
+import { LooseObject } from '../../types'
+
 export type NodeResult = {
     node_id: string
-    bag: {[key: string]: any}
-    external_result: any
+    bag: LooseObject
+    external_input: LooseObject
     result: any
     error: any
     status: string

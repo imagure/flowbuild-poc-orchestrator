@@ -1,4 +1,5 @@
 import { NodeResult } from "../../orchestrator/types"
+import { LooseObject } from "../../types/LooseObject.type"
 
 export type Message = {
     value: MinimumValue | string
@@ -16,11 +17,11 @@ export type MinimumValue = {
 }
 
 export interface StartMessage extends MinimumValue {
-    input?: { [key: string]: any }
+    input?: LooseObject
 }
 
 export interface ContinueMessage extends MinimumValue {
-    input?: { [key: string]: any }
+    input?: LooseObject
     process_id: string
 }
 

@@ -2,10 +2,11 @@ import { v4 as uuid } from 'uuid'
 import { Consumer, Producer } from 'kafkajs'
 import { StartMessage, NodeResultMessage } from '../kafka/types'
 import { RedisClient } from '../redis'
-import { Action, NodeResult, Workflow, Node, Lane } from './types'
+import { Action, NodeResult, Workflow, Node, Lane, ProcessHistory, ProcessData, States } from './types'
 import { envs } from '../configs/env'
 import { log } from '../utils'
 import { Actor, ContinueMessage } from '../kafka/types/message.type'
+import { LooseObject } from '../types'
 class Orchestrator {
     static _instance: Orchestrator
     static _producer: Producer
@@ -64,7 +65,7 @@ class Orchestrator {
                 forbiddenState: {
                     node_id: node.id,
                     bag: {},
-                    external_result: {},
+                    external_input: {},
                     result: {},
                     error: 'Forbidden Lane',
                     status: 'forbidden',
@@ -74,7 +75,7 @@ class Orchestrator {
              }
     }
 
-    async emitProcessState(actor_id: string, process_data: {[key: string]: any}) {
+    async emitProcessState(actor_id: string, process_data: LooseObject) {
         await Orchestrator.producer.send({
             topic: `process-states-topic`,
             messages: [
@@ -85,20 +86,20 @@ class Orchestrator {
         })
     }
 
-    async saveResultToProcess(process_data: {[key: string]: any}, result: NodeResult) {
+    async saveResultToProcess(process_data: ProcessData, result: NodeResult) {
         const {
             process_id,
             workflow_name,
             history
         } = process_data
         if(history) {
-            const parsedHistory = JSON.parse(history)
-            parsedHistory.states.push(result)
+            const clonedHistory = JSON.parse(JSON.stringify(history))
+            clonedHistory.states.push(result)
             if(result.bag) {
-                parsedHistory.bag = {...parsedHistory.bag, [result.node_id]: result.bag || {} }
+                clonedHistory.bag = {...clonedHistory.bag, [result.node_id]: result.bag || {} }
             }
-            parsedHistory.executing = result.next_node_id
-            await this._redis.set(`process_history:${process_id}`, JSON.stringify(parsedHistory), { EX: this._phEX })
+            clonedHistory.executing = result.next_node_id
+            await this._redis.set(`process_history:${process_id}`, JSON.stringify(clonedHistory), { EX: this._phEX })
             return
         }
         await this._redis.set(`process_history:${process_id}`, JSON.stringify({
@@ -112,8 +113,8 @@ class Orchestrator {
     async startProcess(inputMessage: StartMessage) {
         const { input, workflow_name, actor } = inputMessage
         
-        const workflow = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes, lanes } } = JSON.parse(workflow) as Workflow
+        const workflow = await this._redis.get(`workflows:${workflow_name}`) as Workflow
+        const { blueprint_spec: { nodes, lanes } } = workflow
 
         const startNode = nodes.find((n : Node) => n.type==='start')
         const action : Action = {
@@ -143,16 +144,14 @@ class Orchestrator {
 
     async continueProcess(inputMessage: ContinueMessage) {
         const { input, workflow_name, actor, process_id } = inputMessage
-        
-        const history = await this._redis.get(`process_history:${process_id}`)
-        const { bag } = JSON.parse(history)
 
-        const [workflow, string_process_history] = await Promise.all([
-            this._redis.get(`workflows:${workflow_name}`),
-            this._redis.get(`process_history:${process_id}`),
+        const [workflow, history] = await Promise.all([
+            this._redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
+            this._redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
         ])
-        const { blueprint_spec: { nodes, lanes } } = JSON.parse(workflow) as Workflow
-        const { executing } = JSON.parse(string_process_history) || { executing: null }
+
+        const { blueprint_spec: { nodes, lanes } } = workflow
+        const { bag, executing } = history
 
         const continueNode = nodes.find((n : Node) => n.id===executing)
         const action : Action = {
@@ -183,18 +182,20 @@ class Orchestrator {
     async processResult(inputMessage: NodeResultMessage) : Promise<void> {
         const { result, workflow_name, process_id, actor } = inputMessage
 
-        const history = await this._redis.get(`process_history:${process_id}`)
-        const { bag } = JSON.parse(history)
+
+        const [workflow, history] = await Promise.all([
+            this._redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
+            this._redis.get(`process_history:${process_id}`) as Promise<ProcessHistory>,
+        ])
+        const { bag } = history
+        const { blueprint_spec: { nodes, lanes } } = workflow
 
         this.saveResultToProcess({ history, workflow_name, process_id }, result)
         this.emitProcessState(actor.id, { process_id: process_id, workflow_name, state: result })
 
-        if(!result?.next_node_id || result.status === 'waiting') {
+        if(!result?.next_node_id || result.status === States.WAITING) {
             return
         }
-
-        const blueprint = await this._redis.get(`workflows:${workflow_name}`)
-        const { blueprint_spec: { nodes, lanes } } = JSON.parse(blueprint) as Workflow
 
         const nextNode = nodes.find((n : Node) => n.id===result.next_node_id)
         const nodeResolution = (nextNode?.category || nextNode?.type)?.toLowerCase()

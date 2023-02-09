@@ -1,4 +1,6 @@
 import { createClient, RedisClientType, SetOptions } from 'redis'
+import { envs } from '../configs/env';
+import { LooseObject } from '../types';
 
 class RedisClient {
     static _instance: RedisClient
@@ -12,7 +14,7 @@ class RedisClient {
     }
 
     private _client: RedisClientType = createClient({
-        url: `redis://:${process.env.REDIS_PASSWORD || 'eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81'}@${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || '6379'}`,
+        url: `redis://:${envs.REDIS_PASSWORD}@${envs.REDIS_HOST || 'localhost'}:${envs.REDIS_PORT}`,
     })
 
     constructor() {
@@ -30,8 +32,13 @@ class RedisClient {
         return this
     }
 
-    async get(key: string) : Promise<string> {
-        return await this._client.get(key) as string
+    async get(key: string) : Promise<LooseObject | string > {
+        const data = await this._client.get(key) as string
+        try {
+            return JSON.parse(data)
+        } catch(e) {
+            return data
+        }
     }
 
     async set(key: string, value: any, options: SetOptions) {
