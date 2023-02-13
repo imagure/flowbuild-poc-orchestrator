@@ -9,7 +9,8 @@
     "format": "prettier --ignore-path .gitignore --write \"**/*.+(ts)\"",
     "test": "echo \"Warning: no test specified\" && exit 0",
     "start": "node -r tsconfig-paths/register ./dist/src/index",
-    "start:dev": "ts-node -r tsconfig-paths/register ./src/index.ts"
+    "start:dev": "ts-node -r tsconfig-paths/register ./src/index.ts",
+    "prepare": "husky install"
   },
   "keywords": [],
   "author": "",
