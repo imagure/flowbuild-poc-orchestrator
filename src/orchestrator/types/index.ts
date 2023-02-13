@@ -5,15 +5,15 @@ import { ProcessData, ProcessHistory } from './history.type'
 import { ProcessState, States } from './process_state.type'
 
 export {
-    Action,
-    NodeResult,
-    Lane,
-    Node,
-    Blueprint,
-    Workflow,
-    ProcessHistory,
-    ProcessState,
-    ProcessData,
-    States,
-    WfEvent
+  Action,
+  NodeResult,
+  Lane,
+  Node,
+  Blueprint,
+  Workflow,
+  ProcessHistory,
+  ProcessState,
+  ProcessData,
+  States,
+  WfEvent,
 }

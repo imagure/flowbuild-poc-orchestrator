@@ -1,5 +1,3 @@
-import { LooseObject } from "./LooseObject.type";
+import { LooseObject } from './LooseObject.type'
 
-export {
-    LooseObject
-}
+export { LooseObject }
