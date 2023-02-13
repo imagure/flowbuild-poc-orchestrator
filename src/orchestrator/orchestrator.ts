@@ -1,16 +1,15 @@
 import { Consumer, Producer } from 'kafkajs'
-import { NodeResultMessage } from '../kafka/types'
-import { RedisClient } from '../redis'
-import { NodeResult, Node, Lane, ProcessData, Workflow, WfEvent } from './types'
-import { envs } from '../configs/env'
-import { log } from '../utils'
-import { Actor } from '../kafka/types/message.type'
-import { LooseObject } from '../types'
-import { 
-    startProcess, 
-    continueProcess, 
+import { RedisClient } from '@redis'
+import { envs } from '@configs/env'
+import { log } from '@utils'
+import { NodeResultMessage, Actor } from '@kafka/types'
+import { LooseObject } from '@common-types'
+import { NodeResult, Node, Lane, ProcessData } from '@orchestrator/types'
+import {
+    startProcess,
+    continueProcess,
     processResult,
-} from './actions'
+} from '@orchestrator/actions'
 
 class Orchestrator {
     static _instance: Orchestrator
@@ -24,7 +23,7 @@ class Orchestrator {
         Orchestrator._instance = instance;
     }
 
-    static get producer() : Producer {
+    static get producer(): Producer {
         return Orchestrator._producer;
     }
 
@@ -32,7 +31,7 @@ class Orchestrator {
         Orchestrator._producer = producer;
     }
 
-    static get topics() : {[key: string]: string} {
+    static get topics(): { [key: string]: string } {
         return {
             http: 'http-nodes-topic',
             start: 'start-nodes-topic',
@@ -46,13 +45,13 @@ class Orchestrator {
             event: 'event-nodes-topic'
         }
     }
-    
-    redis : RedisClient = new RedisClient()
 
-    private _phEX : number = envs.PROCESS_HISTORY_EXPIRATION
+    redis: RedisClient = new RedisClient()
+
+    private _phEX: number = envs.PROCESS_HISTORY_EXPIRATION
 
     constructor() {
-        if(Orchestrator.instance) {
+        if (Orchestrator.instance) {
             return Orchestrator.instance
         }
         Orchestrator.instance = this
@@ -60,18 +59,18 @@ class Orchestrator {
     }
 
     validateActor(
-        { node, lanes, actor } : 
-        { node : Node, lanes: Array<Lane>, actor: Actor }
-        ): { isValid: Boolean, forbiddenState?: NodeResult } {
-            const { roles: actorRoles } = actor
-            const { roles: laneRoles } = lanes.find((lane: Lane) => lane.id === node.lane_id) || { roles: [] }
-            const roleMatches = laneRoles.find((laneRole: string) => actorRoles.includes(laneRole))
-            return roleMatches 
+        { node, lanes, actor }:
+            { node: Node, lanes: Array<Lane>, actor: Actor }
+    ): { isValid: Boolean, forbiddenState?: NodeResult } {
+        const { roles: actorRoles } = actor
+        const { roles: laneRoles } = lanes.find((lane: Lane) => lane.id === node.lane_id) || { roles: [] }
+        const roleMatches = laneRoles.find((laneRole: string) => actorRoles.includes(laneRole))
+        return roleMatches
             ? {
                 isValid: true
-            } 
-            : { 
-                isValid: false, 
+            }
+            : {
+                isValid: false,
                 forbiddenState: {
                     node_id: node.id,
                     bag: {},
@@ -81,15 +80,15 @@ class Orchestrator {
                     status: 'forbidden',
                     next_node_id: node.next,
                     time_elapsed: 0,
-                }  as NodeResult
-             }
+                } as NodeResult
+            }
     }
 
     async emitProcessState(actor_id: string, process_data: LooseObject) {
         await Orchestrator.producer.send({
             topic: `process-states-topic`,
             messages: [
-                { 
+                {
                     value: JSON.stringify({ actor_id, process_data })
                 }
             ],
@@ -103,7 +102,7 @@ class Orchestrator {
             history,
             bag
         } = process_data
-        if(history) {
+        if (history) {
             const clonedHistory = JSON.parse(JSON.stringify(history))
             clonedHistory.states.push(result)
             clonedHistory.bag = bag
@@ -122,22 +121,22 @@ class Orchestrator {
     }
 
     async runAction(topic: string, inputMessage: NodeResultMessage) {
-        if(topic==='orchestrator-start-process-topic') {
+        if (topic === 'orchestrator-start-process-topic') {
             return await startProcess(this, inputMessage)
         }
 
-        if(topic==='orchestrator-continue-process-topic') {
+        if (topic === 'orchestrator-continue-process-topic') {
             return await continueProcess(this, inputMessage)
         }
 
-        if(topic==='orchestrator-result-topic') {
+        if (topic === 'orchestrator-result-topic') {
             return await processResult(this, inputMessage)
         }
     }
 
     async connect(consumer: Consumer) {
         await consumer.run({
-            eachMessage: async ({ topic, partition, message }) : Promise<void>=> {
+            eachMessage: async ({ topic, partition, message }): Promise<void> => {
                 const receivedMessage = message.value?.toString() || ''
 
                 log({
@@ -148,7 +147,7 @@ class Orchestrator {
                 try {
                     const inputMessage = JSON.parse(receivedMessage)
                     this.runAction(topic, inputMessage)
-                } catch(err) {
+                } catch (err) {
                     console.error(err)
                 }
             },

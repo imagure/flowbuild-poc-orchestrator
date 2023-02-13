@@ -1,6 +1,6 @@
 import { createClient, RedisClientType, SetOptions } from 'redis'
-import { envs } from '../configs/env';
-import { LooseObject } from '../types';
+import { envs } from '@configs/env';
+import { LooseObject } from '@common-types';
 
 class RedisClient {
     static _instance: RedisClient
@@ -18,13 +18,13 @@ class RedisClient {
     })
 
     constructor() {
-        if(RedisClient.instance) {
+        if (RedisClient.instance) {
             return RedisClient.instance
         }
-        
+
         this._client.connect()
         this._client.on('error', err => console.error('Redis Client Error', err))
-        
+
         // for reference:
         // await client.disconnect()
 
@@ -32,18 +32,18 @@ class RedisClient {
         return this
     }
 
-    async get(key: string) : Promise<LooseObject | string > {
+    async get(key: string): Promise<LooseObject | string> {
         const data = await this._client.get(key) as string
         try {
             return JSON.parse(data)
-        } catch(e) {
+        } catch (e) {
             return data
         }
     }
 
     async set(key: string, value: any, options?: SetOptions) {
-        if(options?.EX) {
-            return await this._client.setEx(key, options.EX, value)    
+        if (options?.EX) {
+            return await this._client.setEx(key, options.EX, value)
         }
         return await this._client.set(key, value)
     }

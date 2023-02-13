@@ -1,4 +1,4 @@
-import { Actor } from "../../kafka/types/message.type"
+import { Actor } from "@kafka/types"
 
 export type Action = {
     node_spec: any

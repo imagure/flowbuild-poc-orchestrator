@@ -1,7 +1,7 @@
 import { Kafka } from 'kafkajs'
 import { v4 as uuid } from 'uuid'
-import { envs } from '../configs/env'
-import { Orchestrator } from '../orchestrator'
+import { envs } from '@configs/env'
+import { Orchestrator } from '@orchestrator/orchestrator'
 
 const kafka = new Kafka({
   clientId: `orchestrator-${uuid()}`,
@@ -16,7 +16,7 @@ const connect = async (topics: Array<string>) => {
 
   await producer.connect()
   await consumer.connect()
-  for(let topic of topics) await consumer.subscribe({ topic, fromBeginning: true })
+  for (let topic of topics) await consumer.subscribe({ topic, fromBeginning: true })
 
   await orchestrator.connect(consumer)
   Orchestrator.producer = producer
@@ -25,5 +25,5 @@ const connect = async (topics: Array<string>) => {
 }
 
 export {
-    connect
+  connect
 }

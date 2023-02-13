@@ -1,9 +1,9 @@
 import winston, { Logger } from "winston";
 
 type LOG_MESSAGE = {
-    label?: string,
-    level: string,
-    message: any
+  label?: string,
+  level: string,
+  message: any
 }
 
 const myformat = winston.format.combine(
@@ -27,16 +27,16 @@ function createLogger(logerLevel: string) {
 }
 
 function log(logMessage: LOG_MESSAGE) {
-    const label = logMessage.label || "ORCHESTRATOR";
-    const level = logMessage.level || "info";
-    //ToDo LOG_LEVEL
-    logger.log({
-        level,
-        message: `[${label}] ${JSON.stringify(logMessage.message)}`,
-    });
+  const label = logMessage.label || "ORCHESTRATOR";
+  const level = logMessage.level || "info";
+  //ToDo LOG_LEVEL
+  logger.log({
+    level,
+    message: `[${label}] ${JSON.stringify(logMessage.message)}`,
+  });
 }
 
 export {
-    log,
-    createLogger
+  log,
+  createLogger
 };

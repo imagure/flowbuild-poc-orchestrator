@@ -1,4 +1,4 @@
-import { LooseObject } from '../../types'
+import { LooseObject } from '@common-types'
 
 export type NodeResult = {
     node_id: string

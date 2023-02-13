@@ -1,6 +1,5 @@
 import readline from 'readline'
 import { Producer } from 'kafkajs'
-import { Message } from '../kafka/types';
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -13,11 +12,11 @@ async function readLineAsync(message: string) {
             resolve(answer);
         });
     });
-} 
-  
+}
+
 
 const publishPrompt = async (topic: string, producer: Producer) => {
-    while(true) {
+    while (true) {
         const answer = await readLineAsync('What should be published? R: ') as string
         const messages = [{ value: answer }]
 
