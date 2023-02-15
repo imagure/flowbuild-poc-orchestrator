@@ -1,4 +1,9 @@
 # Flowbuild Orchestrator
+![Coverage lines](./coverage/badge-lines.svg)
+![Coverage branches](./coverage/badge-branches.svg)
+![Coverage functions](./coverage/badge-functions.svg)
+![Coverage statements](./coverage/badge-statements.svg)
+
 Orchestrator for flowbuild environment.
 
 # Run on your localhost:
