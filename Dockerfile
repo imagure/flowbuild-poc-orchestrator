@@ -8,7 +8,7 @@ COPY . .
 RUN npm install -g pnpm
 RUN npm install -g typescript
 RUN pnpm install
-RUN tsc
+RUN pnpm run build
 # If you are building your code for production
 # RUN npm ci --only=production
 
