@@ -9,5 +9,13 @@ const envs = {
     process.env.REDIS_PASSWORD || 'eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81',
   REDIS_HOST: process.env.REDIS_HOST || 'localhost',
   REDIS_PORT: process.env.REDIS_PORT || '6379',
+  COSUMED_TOPICS: JSON.parse(
+    process.env.COSUMED_TOPICS ||
+      `[
+    "orchestrator-result-topic",
+    "orchestrator-start-process-topic",
+    "orchestrator-continue-process-topic"
+  ]`
+  ),
 }
 export { envs }

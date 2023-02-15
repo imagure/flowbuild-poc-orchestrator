@@ -1,4 +1,4 @@
-import { Consumer, Producer } from 'kafkajs'
+import { Consumer, EachMessagePayload, Producer } from 'kafkajs'
 import { RedisClient } from '@redis'
 import { envs } from '@configs/env'
 import { log } from '@utils'
@@ -147,25 +147,33 @@ class Orchestrator {
     }
   }
 
+  async eachMessage({
+    topic,
+    partition,
+    message,
+  }: EachMessagePayload): Promise<void> {
+    const receivedMessage = message.value?.toString() || ''
+
+    log({
+      level: 'info',
+      message: `Message received on Orchestrator.connect -> ${JSON.stringify({
+        partition,
+        offset: message.offset,
+        value: receivedMessage,
+      })}`,
+    })
+
+    try {
+      const inputMessage = JSON.parse(receivedMessage)
+      this.runAction(topic, inputMessage)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   async connect(consumer: Consumer) {
     await consumer.run({
-      eachMessage: async ({ topic, partition, message }): Promise<void> => {
-        const receivedMessage = message.value?.toString() || ''
-
-        log({
-          level: 'info',
-          message: `Message received on Orchestrator.connect -> ${JSON.stringify(
-            { partition, offset: message.offset, value: receivedMessage }
-          )}`,
-        })
-
-        try {
-          const inputMessage = JSON.parse(receivedMessage)
-          this.runAction(topic, inputMessage)
-        } catch (err) {
-          console.error(err)
-        }
-      },
+      eachMessage: this.eachMessage,
     })
   }
 }
