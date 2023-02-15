@@ -61,7 +61,8 @@ it('should correctly RUN consumer connection', async () => {
 })
 
 it('should correctly call startProcess action', async () => {
-  await orchestrator.eachMessage({
+  const eachMessage = orchestrator.eachMessage(orchestrator)
+  eachMessage({
     topic: 'orchestrator-start-process-topic',
     partition: 1,
     message: { value: '{"testMessageKey":"testMessageValue"}' },
@@ -70,7 +71,8 @@ it('should correctly call startProcess action', async () => {
 })
 
 it('should correctly call continueProcess action', async () => {
-  await orchestrator.eachMessage({
+  const eachMessage = orchestrator.eachMessage(orchestrator)
+  eachMessage({
     topic: 'orchestrator-continue-process-topic',
     partition: 1,
     message: { value: '{"testMessageKey":"testMessageValue"}' },
@@ -79,7 +81,8 @@ it('should correctly call continueProcess action', async () => {
 })
 
 it('should correctly call processResult action', async () => {
-  await orchestrator.eachMessage({
+  const eachMessage = orchestrator.eachMessage(orchestrator)
+  eachMessage({
     topic: 'orchestrator-result-topic',
     partition: 1,
     message: { value: '{"testMessageKey":"testMessageValue"}' },

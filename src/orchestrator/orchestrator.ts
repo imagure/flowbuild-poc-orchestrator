@@ -147,33 +147,31 @@ class Orchestrator {
     }
   }
 
-  async eachMessage({
-    topic,
-    partition,
-    message,
-  }: EachMessagePayload): Promise<void> {
-    const receivedMessage = message.value?.toString() || ''
+  eachMessage(orchestrator: Orchestrator) {
+    return async ({ topic, partition, message }: EachMessagePayload) => {
+      const receivedMessage = message.value?.toString() || ''
 
-    log({
-      level: 'info',
-      message: `Message received on Orchestrator.connect -> ${JSON.stringify({
-        partition,
-        offset: message.offset,
-        value: receivedMessage,
-      })}`,
-    })
+      log({
+        level: 'info',
+        message: `Message received on Orchestrator.connect -> ${JSON.stringify({
+          partition,
+          offset: message.offset,
+          value: receivedMessage,
+        })}`,
+      })
 
-    try {
-      const inputMessage = JSON.parse(receivedMessage)
-      this.runAction(topic, inputMessage)
-    } catch (err) {
-      console.error(err)
+      try {
+        const inputMessage = JSON.parse(receivedMessage)
+        orchestrator.runAction(topic, inputMessage)
+      } catch (err) {
+        console.error(err)
+      }
     }
   }
 
   async connect(consumer: Consumer) {
     await consumer.run({
-      eachMessage: this.eachMessage,
+      eachMessage: this.eachMessage(this),
     })
   }
 }
