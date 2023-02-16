@@ -12,6 +12,7 @@
     "test:badges": "pnpm run test:cov  && jest-coverage-badges",
     "start": "node -r tsconfig-paths/register ./dist/src/index",
     "start:dev": "ts-node -r tsconfig-paths/register ./src/index.ts",
+    "start:climem": "export CLIMEM=8998 && pnpm run build && node -r climem -r tsconfig-paths/register ./dist/src/index",
     "prepare": "husky install"
   },
   "keywords": [],
@@ -25,6 +26,7 @@
     "@types/uuid": "^9.0.0",
     "@typescript-eslint/eslint-plugin": "^5.51.0",
     "@typescript-eslint/parser": "^5.51.0",
+    "climem": "^1.0.3",
     "eslint": "^8.34.0",
     "eslint-config-prettier": "^8.6.0",
     "husky": "^8.0.3",
