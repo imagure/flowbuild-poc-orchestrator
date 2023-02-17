@@ -1,5 +1,5 @@
-import { NodeResult } from '../../orchestrator/types'
-import { LooseObject } from '../../types/LooseObject.type'
+import { LooseObject } from '@/types'
+import { NodeResult, Workflow } from '@orchestrator/types'
 
 export type Message = {
   value: MinimumValue | string
@@ -12,12 +12,13 @@ export interface Actor {
 }
 
 export type MinimumValue = {
-  workflow_name: string
+  workflow: Workflow
   actor: Actor
 }
 
 export interface StartMessage extends MinimumValue {
   input?: LooseObject
+  process_id: string
 }
 
 export interface ContinueMessage extends MinimumValue {

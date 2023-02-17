@@ -1,21 +1,19 @@
 import { ContinueMessage } from '@kafka/types'
 import { Orchestrator } from '@orchestrator/orchestrator'
-import { Action, Workflow, Node, ProcessHistory } from '@orchestrator/types'
+import { Action, Node, ProcessHistory } from '@orchestrator/types'
 
 export async function continueProcess(
   orchestrator: Orchestrator,
   inputMessage: ContinueMessage
 ) {
-  const { input, workflow_name, actor, process_id } = inputMessage
+  const { input, workflow, actor, process_id } = inputMessage
 
-  const [workflow, history] = await Promise.all([
-    orchestrator.redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
-    orchestrator.redis.get(
-      `process_history:${process_id}`
-    ) as Promise<ProcessHistory>,
-  ])
+  const history = (await orchestrator.redis.get(
+    `process_history:${process_id}`
+  )) as ProcessHistory
 
   const {
+    name: workflow_name,
     blueprint_spec: { nodes, lanes },
   } = workflow
   const { bag, executing } = history
@@ -33,7 +31,7 @@ export async function continueProcess(
         parameters: {},
       },
       node_spec: continueNode,
-      workflow_name,
+      workflow,
       process_id,
       actor,
     }
@@ -45,11 +43,11 @@ export async function continueProcess(
     })
     if (!isValid) {
       orchestrator.saveResultToProcess(
-        { history, workflow_name, process_id: action.process_id },
+        { history, workflow_name, process_id },
         forbiddenState
       )
       orchestrator.emitProcessState(actor.id, {
-        process_id: action.process_id,
+        process_id,
         workflow_name,
         state: forbiddenState,
       })

@@ -1,25 +1,17 @@
 import { NodeResultMessage } from '@kafka/types'
 import { Orchestrator } from '@orchestrator/orchestrator'
-import {
-  Action,
-  Workflow,
-  Node,
-  ProcessHistory,
-  States,
-} from '@orchestrator/types'
+import { Action, Node, ProcessHistory, States } from '@orchestrator/types'
 
 export async function processResult(
   orchestrator: Orchestrator,
   inputMessage: NodeResultMessage
 ): Promise<void> {
-  const { result, workflow_name, process_id, actor } = inputMessage
+  const { result, workflow, process_id, actor } = inputMessage
 
-  const [workflow, history] = await Promise.all([
-    orchestrator.redis.get(`workflows:${workflow_name}`) as Promise<Workflow>,
-    orchestrator.redis.get(
-      `process_history:${process_id}`
-    ) as Promise<ProcessHistory>,
-  ])
+  const { name: workflow_name } = workflow
+  const history = (await orchestrator.redis.get(
+    `process_history:${process_id}`
+  )) as ProcessHistory
 
   const bag = { ...(history?.bag || {}), [result.node_id]: result.bag || {} }
 
@@ -32,7 +24,7 @@ export async function processResult(
     result
   )
   orchestrator.emitProcessState(actor.id, {
-    process_id: process_id,
+    process_id,
     workflow_name,
     state: result,
   })
@@ -58,7 +50,7 @@ export async function processResult(
         parameters: nextNode?.parameters || {},
       },
       node_spec: nextNode,
-      workflow_name,
+      workflow,
       process_id,
       actor,
     }
