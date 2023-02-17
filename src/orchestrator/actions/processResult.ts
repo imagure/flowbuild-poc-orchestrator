@@ -21,7 +21,7 @@ export async function processResult(
     ) as Promise<ProcessHistory>,
   ])
 
-  const bag = { ...history.bag, [result.node_id]: result.bag || {} }
+  const bag = { ...(history?.bag || {}), [result.node_id]: result.bag || {} }
 
   const {
     blueprint_spec: { nodes, lanes },
